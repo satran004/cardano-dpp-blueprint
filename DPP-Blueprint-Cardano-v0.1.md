@@ -417,7 +417,7 @@ flowchart LR
 
 ```json
 {
-  "batch_id": "evt-2025-10-01T08",
+  "batch_id": "evt-2025-10-01T08-009",
   "root": "0x91af...",
   "index": 27,
   "events": 142,
