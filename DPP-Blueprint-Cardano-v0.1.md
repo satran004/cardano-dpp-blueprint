@@ -306,7 +306,7 @@ function createPrivacyProof(productData) {
   };
 
   // 3. TODO: Submit transaction to Cardano
-  submitRefScriptTx({ datum, signer: issuerKey });
+  submitRefTokenScriptTx({ datum, signer: issuerKey });
 
   return { root: merkleRoot, version: productData.version };
 }
