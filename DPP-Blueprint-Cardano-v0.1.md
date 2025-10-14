@@ -12,7 +12,7 @@
    - [Persona Summaries Mapped to Patterns](#22-persona-summaries-mapped-to-patterns)
 3. [Decision Matrix](#3-decision-matrix)
 4. [Solution Patterns](#4-solution-patterns)
-   - [4.1 Fire-and-Forget (Static passport anchor)](#41-fire-and-forget-static-passport-anchor)
+   - [4.1 Static Passport Anchor](#41-static-passport-anchor)
    - [4.2 Anchored Proof (Privacy-preserving proof)](#42-anchored-proof-privacy-preserving-proof)
    - [4.3 Event Log (Append-only lifecycle history)](#43-event-log-append-only-lifecycle-history)
    - [4.4 High Throughput (Fast scanning for millions of products)](#44-high-throughput-fast-scanning-for-millions-of-products)
@@ -51,7 +51,7 @@ one architecture or data model, it highlights options that teams can choose from
 
 | Pattern category | Generalized requirements | Personas supporting this need |
 |-----------------|--------------------------|-------------------------------|
-| **Fire-and-Forget** | Low-complexity setup, one-time or rare updates, QR/NFC access, predictable ADA spend, guidance on mandatory vs optional fields | Clara (Compliance SME), early textile adopters |
+| **Static Passport Anchor** | Low-complexity setup, one-time or rare updates, QR/NFC access, predictable ADA spend, guidance on mandatory vs optional fields | Clara (Compliance SME), early textile adopters |
 | **Anchored Proof** | Keep ERP/PIM data private, publish tamperproof attestations, selective disclosure for regulators, connector toolkits | Javier (Integration provider), Clara (for gradual upgrades) |
 | **Event Log** | Append-only lifecycle history, multi-party submissions, IoT feeds, authenticated update governance, regulator-friendly audit trail | Sophie (Lifecycle tracker), Marina (Plastic recovery) |
 | **High Throughput** | Scale to millions of SKUs, sub-second QR scans, batch operations, global infrastructure resilience, SLA monitoring | Marco (Enterprise retailer), Sophie (large battery fleets) |
@@ -60,9 +60,9 @@ one architecture or data model, it highlights options that teams can choose from
 
 | Persona | Goals & key needs | Pain points | Suggested starting pattern |
 |---------|------------------|-------------|---------------------------|
-| **Clara Müller** — Compliance-first SME manufacturer | Publish required ESPR fields cheaply, update when suppliers change, keep data accessible via GS1 Digital Link | Limited IT capacity, evolving requirements, per-SKU overhead | Fire-and-Forget → Anchored Proof when versioning starts |
+| **Clara Müller** — Compliance-first SME manufacturer | Publish required ESPR fields cheaply, update when suppliers change, keep data accessible via GS1 Digital Link | Limited IT capacity, evolving requirements, per-SKU overhead | Static Passport Anchor → Anchored Proof when versioning starts |
 | **Sophie Laurent** — Lifecycle event tracker (automotive batteries) | Consolidate multi-party events, integrate IoT, maintain full history for audits | Partner onboarding friction, synchronizing events, certification gaps | Event Log with Anchored Proof for certificate snapshots |
-| **Marco Rossi** — High-throughput retailer CTO | Issue passports at scale, deliver instant consumer responses, process bulk updates | Performance at scale, consumer trust, cost control | High Throughput (batched anchors + edge cache) |
+| **Marco Rossi** — High-throughput retailer CTO | Issue passports at scale, deliver instant consumer responses, process bulk updates | Performance at scale, consumer trust, cost control | High Throughput (batched anchors + caching layer) |
 | **Marina Silva** — Plastic recovery operations | Verify recovery activities, prevent double counting, produce proof for ESG claims | Distributed collectors, data accuracy, trust across network | Event Log with certificate issuance/burn anchored on-chain |
 | **Dr. Javier Ortega** — Integration provider | Bridge ERP to blockchain, maintain confidentiality, deliver dashboards | Balancing privacy vs transparency, staying current on standards | Anchored Proof toolkit + event log API adapters |
 
@@ -75,7 +75,7 @@ Use this flowchart to choose the right pattern based on your requirements:
 flowchart TD
     Start([Start: Choose Your DPP Pattern]) --> Q1{How often is<br/>product data<br/>updated?}
 
-    Q1 -->|Rarely/Never| Pattern1[Fire-and-Forget<br/>~0.2 to 1 ADA/product]
+    Q1 -->|Rarely/Never| Pattern1[Static Passport Anchor<br/>~0.2 to 1 ADA/product]
     Q1 -->|Occasionally| Q2{Does data contain<br/>private/confidential<br/>fields?}
     Q1 -->|Frequently| Q3{Multiple organizations<br/>writing data?}
 
@@ -96,7 +96,7 @@ All diagrams follow a simplified component style. Components can be deployed as 
 
 **Important:** On-chain payloads can be encoded as JSON or CBOR; final data formats require agreement with domain leads.
 
-### 4.1 Fire-and-Forget (Static passport anchor)
+### 4.1 Static Passport Anchor
 
 **Where it fits:** Initial compliance for SMEs with stable product data.
 
@@ -140,7 +140,7 @@ flowchart LR
 
 ```json
 {
-  "721": {
+  "<DPP_label>": {
     "<policy_id>": {
       "GTIN-09506000123457": {
         "name": "Eco Tee Sample",
@@ -158,7 +158,7 @@ flowchart LR
 }
 ```
 
-> **Note:** On-chain data can use CBOR encoding for efficiency. Final field names will follow DPP standards.
+> **Note:** A new DPP metadata label (an integer) should be defined for Digital Product Passports. The 721 label (CIP-25 NFT metadata) should not be used to avoid confusion with NFT standards. On-chain data can use CBOR encoding for efficiency. Final field names will follow DPP standards.
 
 **Skeleton code (JavaScript example):**
 
@@ -187,7 +187,7 @@ function registerProduct(product) {
 **Skeleton validator (Aiken example):**
 
 ```aiken
-validator fire_and_forget(owner: VerificationKeyHash) {
+validator static_passport_anchor(owner: VerificationKeyHash) {
   fn check(_datum: Data, _redeemer: Data, ctx: ScriptContext) -> Bool {
     let signed = ctx.transaction.signatories.contains(owner)
     signed // TODO: Add checks for single-use minting
@@ -225,6 +225,43 @@ flowchart LR
 3. **Fetch product data** - Portal retrieves the full product information from storage
 4. **Verify fingerprint** - Portal checks that the data fingerprint matches what's recorded on Cardano
 5. **Display results** - Show product information with a "✓ Verified on Cardano" badge if fingerprints match
+
+
+#### C. Handling Data Updates (Versioning)
+
+Even though the Static Passport Anchor pattern is designed for rarely or never updated scenarios, DPP data may still need to change over time due to regulatory updates, supplier changes, or corrections. When updates are required, versioning can be implemented using Cardano native assets.
+
+**Two Versioning Approaches:**
+
+**Approach 1: Burn and Mint**
+
+In this approach, the existing DPP native asset is burned and a new asset is minted with the next version number and updated data.
+
+**Benefits:**
+- Unlocks ADA that was locked in the UTxO containing the burned token
+- Provides a clean version transition with only the current version active
+- With CIP-68 tokens, additional validation rules and checks can be enforced during burn/mint operations to ensure proper version progression
+
+**Considerations:**
+- Requires transaction to burn old asset and mint new one
+- Must maintain proper version sequencing in validator logic
+
+**Approach 2: Mint Only (No Burn)**
+
+In this approach, a new DPP native asset is minted with the next version number without burning previous versions.
+
+**Benefits:**
+- Preserves complete version history on-chain
+- Simpler transaction flow (only minting required)
+- Allows querying historical versions if needed
+
+**Considerations:**
+- DPP native assets for multiple versions co-exist on-chain
+- Minimum ADA remains locked in UTxOs holding these DPP native assets or tokens
+- Requires clear mechanism to identify the "current" version (e.g., highest version number)
+- May accumulate locked ADA over many version updates
+
+> **Note:** These versioning approaches are not limited to Static Passport Anchor. They apply to any pattern in this blueprint where DPP native assets need versioning. Teams using Anchored Proof, Event Log, or High Throughput patterns should evaluate the same burn-and-mint vs. mint-only trade-offs based on their specific update frequency and ADA liquidity requirements.
 
 ---
 
@@ -335,26 +372,32 @@ This is how auditors verify specific claims without seeing all confidential data
 flowchart LR
     Auditor([Auditor/Regulator<br/>Wants to Verify]) --> API[Verification API<br/>Service]
     API --> Request[Request Specific Fact<br/>e.g., Origin]
-    Request --> Fetch[Get Fact + Proof Path<br/>from Private Store]
+    Request --> Auth[Authenticate & Authorize<br/>Check Permissions]
+    Auth -->|Authorized| Fetch[Get Fact + Proof Path<br/>from Private Store]
+    Auth -->|Denied| Denied[Access Denied<br/>✗ Not Authorized]
     Fetch --> Check[Check Against Cardano<br/>Verify Fingerprint]
     Check --> Result[Show Verified Fact<br/>✓ Without Other Data]
     Result --> Auditor
+    Denied --> Auditor
 
     style Auditor fill:#E1F5FE,stroke:#01579B
     style API fill:#F3E5F5,stroke:#4A148C
     style Request fill:#FFF3E0,stroke:#E65100
+    style Auth fill:#E8EAF6,stroke:#3F51B5
     style Fetch fill:#E8F5E9,stroke:#1B5E20
     style Check fill:#FFE0B2,stroke:#E65100
     style Result fill:#E0F2F1,stroke:#004D40
+    style Denied fill:#FFEBEE,stroke:#B71C1C
 ```
 
 **Steps to verify a specific fact:**
 
 1. **Request specific information** - Auditor asks "What is this product's origin?" (not asking for everything)
-2. **Fetch fact with proof** - API provides the answer ("India") plus a proof path through the tree structure
-3. **Get blockchain record** - API retrieves the root fingerprint from Cardano
-4. **Verify the proof** - Calculate: Does "origin=India" + proof path = root fingerprint on blockchain?
-5. **Show result** - If match: "✓ Origin verified as India" - without revealing supplier pricing or other confidential data
+2. **Authenticate and authorize** - API verifies requester's identity and checks if they have permission to access the requested claim
+3. **Fetch fact with proof** - If authorized, API provides the answer ("India") plus a proof path through the tree structure
+4. **Get blockchain record** - API retrieves the root fingerprint from Cardano
+5. **Verify the proof** - Calculate: Does "origin=India" + proof path = root fingerprint on blockchain?
+6. **Show result** - If match: "✓ Origin verified as India" - without revealing supplier pricing or other confidential data
 
 **Example selective disclosure:**
 
@@ -369,6 +412,29 @@ flowchart LR
 - Combine fact + proof pieces = calculated fingerprint
 - Compare with blockchain: calculated = 0x5bd2... ✓
 - Result: Origin verified WITHOUT revealing supplier cost or other private data
+
+
+**Access Control and Authorization**
+
+Since the Anchored Proof pattern is privacy-preserving, it requires an access control layer to ensure only authorized requesters can view specific claims. Product data should be disclosed only when required and only to requesters with proper permissions.
+
+**Claim Categorization (Example):**
+
+Product claims can be organized into categories based on sensitivity and intended audience:
+- **Public** - Sustainability information, care instructions (accessible to consumers)
+- **Regulatory** - Origin, compliance certificates, audit trails (accessible to regulators/auditors)
+- **Confidential** - Supplier pricing, trade secrets, internal cost structures (restricted to authorized parties)
+
+**Authorization Approaches:**
+
+Implementers should evaluate the following approaches based on their specific requirements:
+
+- **Role-Based Access Control (RBAC)** - Assign roles to requesters (e.g., consumer, auditor, regulator) and map roles to accessible claim categories through an access control list
+- **Token-Based Authorization** - Issue signed tokens (JWT-like) to authorized parties with embedded scope defining which claim categories they can access
+- **Attribute-Based Access** - Use cryptographic credentials where different claims are protected by different keys, requiring requesters to present proper decryption credentials
+- **Authorization Token (NFT-based)** - Issue NFTs as authorization credentials where token metadata defines access scope; requesters prove NFT ownership when accessing claims; NFTs can be revoked by burning or time-limited
+
+> **Note:** The choice of access control mechanism should consider regulatory compliance requirements (e.g., GDPR, data minimization principles), existing infrastructure, and the level of decentralization desired. Implementers may also combine multiple approaches for a layered security model.
 
 ---
 
@@ -470,9 +536,9 @@ This is how regulators and auditors view the complete history of events for a pr
 
 ```mermaid
 flowchart LR
-    Regulator([Regulator/Auditor<br/>Needs Audit Trail]) --> API[Timeline API<br/>Query Service]
-    API --> FetchEvents[Get Event History<br/>from Storage]
-    API --> FetchProofs[Get Batch Fingerprints<br/>from Cardano]
+    Regulator([Regulator/Auditor<br/>Needs Audit Trail]) --> API[Timeline API<br/>Query by Product ID]
+    API --> FetchEvents[Get Event History<br/>for Product from Storage]
+    FetchEvents --> FetchProofs[Get Batch Fingerprints<br/>from Cardano]
     FetchProofs --> Verify[Verify Each Event<br/>Against Batches]
     Verify --> Timeline[Show Complete Timeline<br/>✓ All Events Verified]
     Timeline --> Regulator
@@ -529,7 +595,7 @@ All events verified on Cardano blockchain ✓
 
 **On-chain vs off-chain mix:**
 - **On-chain:** Periodic batch anchors (hourly/daily) storing fingerprints for thousands of products at once
-- **Off-chain:** Pre-loaded passport pages stored at edge locations worldwide for instant access, background verification against blockchain
+- **Off-chain:** Pre-loaded passport pages stored in distributed caching infrastructure for instant access, background verification against blockchain
 
 
 #### A. Processing Bulk Products
@@ -544,14 +610,14 @@ flowchart LR
     Ingest --> Partition[Create Partitions<br/>10k products each]
     Partition --> Hash[Calculate Fingerprints<br/>Per Partition]
     Hash --> Cardano[Record on Cardano<br/>Hourly Batches]
-    Hash --> CDN[Upload to CDN<br/>Edge Locations]
+    Hash --> Cache[Upload to Cache<br/>Distribution Layer]
 
     style Backend fill:#E1F5FE,stroke:#01579B
     style Ingest fill:#F3E5F5,stroke:#4A148C
     style Partition fill:#FFF3E0,stroke:#E65100
     style Hash fill:#E8F5E9,stroke:#1B5E20
     style Cardano fill:#FFE0B2,stroke:#E65100
-    style CDN fill:#E0F2F1,stroke:#004D40
+    style Cache fill:#E0F2F1,stroke:#004D40
 ```
 
 **Steps to process bulk products:**
@@ -560,7 +626,7 @@ flowchart LR
 2. **Group into partitions** - Organize products by region, brand, or time window (e.g., "textiles-europe-morning")
 3. **Create partition fingerprint** - Build Merkle tree for each partition (e.g., 10,000 products), calculate root hash
 4. **Record on blockchain** - Submit one transaction per partition to Cardano (instead of millions of transactions)
-5. **Distribute to edge** - Upload product data and proofs to CDN edge locations worldwide
+5. **Distribute to cache** - Upload product data and proofs to distributed caching infrastructure
 6. **Pre-compute responses** - Generate ready-to-serve product pages with proofs included
 
 **Cost efficiency example:**
@@ -598,7 +664,7 @@ function processBulkProducts(partition) {
   // 3. TODO: Submit single transaction for entire partition
   submitBatchTx({ metadata, signer: opsKey });
 
-  // 4. TODO: Upload proof bundles to global CDN
+  // 4. TODO: Upload proof bundles to caching infrastructure
   uploadProofBundle(partition.items, root);
 }
 ```
@@ -624,18 +690,18 @@ This is how consumers get instant responses (< 300ms) when scanning QR codes.
 
 ```mermaid
 flowchart LR
-    Consumer([Consumer<br/>Scans QR Code]) --> Edge[CDN Edge Server<br/>Nearest Location]
-    Edge --> Cache[Check Cache<br/>Pre-loaded Data]
-    Cache -->|Cache Hit| Fast[Serve Product Page<br/>< 100ms]
-    Cache -->|Cache Miss| Origin[Origin Server<br/>Fetch Data]
+    Consumer([Consumer<br/>Scans QR Code]) --> CachingLayer[Caching Layer<br/>Fast Response Service]
+    CachingLayer --> Check[Check Cache<br/>Pre-loaded Data]
+    Check -->|Cache Hit| Fast[Serve Product Page<br/>< 100ms]
+    Check -->|Cache Miss| Origin[Origin Server<br/>Fetch Data]
     Origin --> Verify[Background Check<br/>Against Cardano]
-    Verify --> Update[Update Edge Cache]
+    Verify --> Update[Update Cache]
     Fast --> Consumer
     Update --> Consumer
 
     style Consumer fill:#E1F5FE,stroke:#01579B
-    style Edge fill:#FFF3E0,stroke:#E65100
-    style Cache fill:#F3E5F5,stroke:#4A148C
+    style CachingLayer fill:#FFF3E0,stroke:#E65100
+    style Check fill:#F3E5F5,stroke:#4A148C
     style Fast fill:#E8F5E9,stroke:#1B5E20
     style Origin fill:#FFE0B2,stroke:#E65100
     style Verify fill:#E0F2F1,stroke:#004D40
@@ -644,16 +710,16 @@ flowchart LR
 
 **Steps for instant scanning:**
 
-1. **Consumer scans QR** - QR code directs to nearest CDN edge server (automatically picks closest location)
-2. **Check edge cache** - Edge server checks if product data is already pre-loaded
+1. **Consumer scans QR** - QR code directs to the fast response service
+2. **Check cache** - System checks if product data is already pre-loaded in cache
 3. **Instant response** - If cached: serve immediately (typically 50-150ms)
 4. **Background verification** - System periodically verifies cached data against Cardano (not during scan - happens in background)
 5. **Display product info** - Show complete product passport with "✓ Verified" badge
 
 **Performance optimization:**
 
-- **Pre-loading:** Most popular products pre-loaded to edge locations
-- **Geographic distribution:** 100+ edge locations worldwide
+- **Pre-loading:** Most popular products pre-loaded in cache
+- **Geographic distribution:** Deploy caching infrastructure close to consumers (e.g., CDN edge networks, regional servers, distributed cache clusters)
 - **Compression:** Data compressed for faster transfer
 - **Smart caching:** Frequently scanned products stay in cache longer
 
@@ -674,7 +740,7 @@ Last verified: 2 minutes ago
 
 **Why it's fast:**
 
-- Product data stored at edge (physically close to consumer)
+- Product data cached close to consumers (reducing network latency)
 - Blockchain verification happens in background, not during scan
 - Pre-computed proofs (no calculation needed at scan time)
 - Smart caching keeps popular products instantly available
@@ -686,10 +752,10 @@ This table compares the four patterns across key dimensions to help you choose:
 
 | Pattern | Complexity | Typical on-chain cost (ADA)         | Throughput capacity | Transparency | Privacy posture |
 |---------|------------|-------------------------------------|--------------------|--------------| ----------------|
-| **Fire-and-Forget** | Low | ≈ 0.2 to 1 ADA per product or batch | Low (occasional writes) | High (static public anchor) | Moderate (keep sensitive data off-chain) |
+| **Static Passport Anchor** | Low | ≈ 0.2 to 1 ADA per product or batch | Low (occasional writes) | High (static public anchor) | Moderate (keep sensitive data off-chain) |
 | **Anchored Proof** | Medium | ≈ 0.2 ADA per update                | Medium (versioned updates) | High (proof visible, data hidden) | High (only hashes on-chain) |
 | **Event Log** | Medium-High | ≈ 0.25 ADA per batch                | Medium-High (depends on batch window) | High (append-only trail) | High (detailed data stays off-chain) |
-| **High Throughput** | High | ≈ 0.3 ADA per 1k items anchored     | Very High (edge cached responses) | High (batch anchors auditable) | High (selective disclosure via proofs) |
+| **High Throughput** | High | ≈ 0.3 ADA per 1k items anchored     | Very High (cached responses) | High (batch anchors auditable) | High (selective disclosure via proofs) |
 
 **Notes:**
 - Costs are indicative; actual fees depend on transaction size and Cardano parameter updates
@@ -741,7 +807,7 @@ This section describes **optional alternative structures** that teams may explor
 - Need to rebuild tree when data changes
 - Not optimal for frequent individual item updates
 
-**Best for:** Fire-and-Forget, Anchored Proof (batch updates), High Throughput
+**Best for:** Static Passport Anchor, Anchored Proof (batch updates), High Throughput
 
 
 ### Merkle Patricia Trie (MPT)
@@ -834,7 +900,7 @@ For teams wanting to use MPT on Cardano, the Aiken ecosystem provides:
 
 | Pattern | Recommended Structure | Reason |
 |---------|----------------------|--------|
-| Fire-and-Forget | Merkle Tree | Simple, one-time or rare updates |
+| Static Passport Anchor | Merkle Tree | Simple, one-time or rare updates |
 | Anchored Proof | Merkle Tree | Batch updates, proven approach |
 | Event Log | MMR or Hash Chain + Checkpoints | Append-only, historical proofs |
 | High Throughput | Merkle Tree | Balance simplicity and efficiency |
@@ -847,7 +913,7 @@ For teams wanting to use MPT on Cardano, the Aiken ecosystem provides:
 
 - Need a plan so cached responses only show as verified after the blockchain check finishes (High Throughput).
 - Need a clear way to publish and trust partner signing keys for event submissions (Event Log).
-- Need a passport status update process to mark records inactive or replaced (Fire-and-Forget, Anchored Proof, Event Log).
+- Need a passport status update process to mark records inactive or replaced (Static Passport Anchor, Anchored Proof, Event Log).
 - Need shared rules for hashing/serializing data so every team calculates the same fingerprints (All patterns).
 
 
@@ -889,7 +955,7 @@ This draft blueprint outlines several Cardano-first solution patterns that diffe
 
 | Version | Date         | Status | Key Changes |
 |---------|--------------|--------|-------------|
-| 0.1 Draft | October 2025 | Initial Draft | First release of DPP blueprint with 4 solution patterns (Fire-and-Forget, Anchored Proof, Event Log, High Throughput) |
+| 0.1 Draft | October 2025 | Initial Draft | First release of DPP blueprint with 4 solution patterns (Static Passport Anchor, Anchored Proof, Event Log, High Throughput) |
 
 ### Contributing
 
